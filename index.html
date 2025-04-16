@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 增强动画天气查询 - 优化版</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <style>
+        /* --- Base Styles & Variables --- */
+        :root {
+            --rain-color: #a4d8ff; --snow-color: #ffffff; --sun-color: #ffd700;
+            --sun-glow: rgba(255, 215, 0, 0.7); --cloud-color: #f0f8ff;
+            --dark-cloud-color: #bdc3c7; --lightning-color: #f1c40f;
+            --base-text: #f0f0f0; --subtle-text: rgba(240, 240, 240, 0.7);
+            --card-width: 220px; /* Default basis/width for cards */
+            --card-min-height: 300px; /* Default min height */
+            /* Default Animation Speeds */
+            --wind-base-duration: 25s; --rain-base-duration: 1.2s; --snow-base-duration: 8s;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #16222a 0%, #3a6073 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--base-text);
+        }
+
+        /* --- Input Area Styles --- */
+        .input-container {
+            position: relative;
+            max-width: 550px;
+            margin: 0 auto;
+        }
+        #cityInput {
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s;
+        }
+        #cityInput:focus {
+            background-color: rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.5);
+        }
+        #queryBtn {
+            background: linear-gradient(45deg, #3498db, #5dade2);
+            transition: all 0.3s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        #queryBtn:hover {
+            background: linear-gradient(45deg, #2980b9, #4ba2d1);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        #queryBtn:active {
+            transform: translateY(0px);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+        #queryBtn:disabled {
+            background: #556677;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* --- Card Styles --- */
+        .info-card {
+            background-color: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            min-height: var(--card-min-height);
+            overflow: hidden;
+        }
+        .info-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        /* --- Condition Card Enhancements --- */
+        .condition-card { min-width: 240px; }
+        .condition-text { font-size: 1.9rem; font-weight: bold; }
+
+        /* Sunny Enhancements */
+        .condition-card.sunny .sun {
+            position: absolute; top: 20%; left: 50%; transform: translateX(-50%); width: 75px; height: 75px;
+            background: radial-gradient(circle, #fff5c4 0%, var(--sun-color) 70%); border-radius: 50%;
+            filter: blur(1px);
+            box-shadow: 0 0 35px var(--sun-glow), 0 0 60px var(--sun-glow), 0 0 90px rgba(255, 215, 0, 0.4), inset 0 0 15px rgba(255, 255, 255, 0.3);
+            animation: pulse-complex 5s infinite ease-in-out; z-index: 1;
+        }
+        .condition-card.sunny .sun-ray {
+            position: absolute; top: calc(20% + 37.5px); left: 50%; width: 180%; height: 6px;
+            background: linear-gradient(90deg, rgba(255, 235, 150, 0), rgba(255, 235, 150, 0.5), rgba(255, 235, 150, 0));
+            border-radius: 3px; transform-origin: 0% 50%;
+            animation: spin-rays 20s linear infinite; opacity: 0;
+            filter: blur(1px);
+        }
+        .condition-card.sunny .sun-ray.r1 { transform: rotate(0deg); animation-delay: -1s; }
+        .condition-card.sunny .sun-ray.r2 { transform: rotate(60deg); animation-delay: -7s; }
+        .condition-card.sunny .sun-ray.r3 { transform: rotate(120deg); animation-delay: -14s; }
+        .condition-card.sunny .heat-haze {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('data:image/svg+xml,\
+              <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">\
+                <defs><filter id="wave"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="2" stitchTiles="stitch" x="0" y="0" width="100%" height="100%" result="turbulence"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="turbulence" scale="5" xChannelSelector="R" yChannelSelector="G" x="0" y="0" width="100%" height="100%"></feDisplacementMap></filter></defs>\
+                <rect width="80" height="80" fill="transparent"/>\
+              </svg>');
+             opacity: 0.08; z-index: 0; mix-blend-mode: overlay; filter: url(#wave);
+             animation: heat-wave 4s linear infinite alternate;
+        }
+        @keyframes pulse-complex {
+          0%, 100% { transform: translateX(-50%) scale(1); box-shadow: 0 0 35px var(--sun-glow), 0 0 60px var(--sun-glow), 0 0 90px rgba(255, 215, 0, 0.4), inset 0 0 15px rgba(255, 255, 255, 0.3); }
+          50% { transform: translateX(-50%) scale(1.06); box-shadow: 0 0 45px var(--sun-glow), 0 0 75px var(--sun-glow), 0 0 110px rgba(255, 215, 0, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.4); }
+        }
+        @keyframes spin-rays {
+            0%, 100% { transform: rotate(0deg) scaleX(0.7); opacity: 0; }
+            20%, 80% { opacity: 0.6; }
+            50% { transform: rotate(180deg) scaleX(1); }
+        }
+        @keyframes heat-wave { from { transform: scale(1.1) translateY(-5px); } to { transform: scale(1.1) translateY(5px); } }
+
+        /* Cloudy Styles */
+        .condition-card.clouds .cloud {
+            position: absolute; border-radius: 50%; z-index: 1;
+            background: linear-gradient(to bottom, #ffffff 60%, #e8f0f8); filter: blur(1px);
+            animation: drift-complex linear infinite alternate;
+        }
+        .condition-card.clouds .cloud-back { width: 100px; height: 35px; top: 30%; left: -110px; opacity: 0.6; animation-duration: calc(var(--wind-base-duration) * 1.6); animation-delay: -8s; }
+        .condition-card.clouds .cloud-mid { width: 130px; height: 50px; top: 45%; left: -140px; opacity: 0.8; animation-duration: calc(var(--wind-base-duration) * 1.1); }
+        .condition-card.clouds .cloud-front { width: 90px; height: 30px; top: 65%; left: -100px; opacity: 1; animation-duration: calc(var(--wind-base-duration) * 0.9); animation-delay: -3s; }
+        .condition-card.clouds .cloud::before, .condition-card.clouds .cloud::after { content: ''; position: absolute; background: inherit; border-radius: 50%; filter: inherit; }
+        .condition-card.clouds .cloud-back::before { width: 50px; height: 50px; top: -25px; left: 25px; }
+        .condition-card.clouds .cloud-back::after { width: 40px; height: 40px; top: -20px; right: 20px; }
+        .condition-card.clouds .cloud-mid::before { width: 70px; height: 70px; top: -40px; left: 30px; }
+        .condition-card.clouds .cloud-mid::after { width: 55px; height: 55px; top: -30px; right: 25px; }
+        .condition-card.clouds .cloud-front::before { width: 45px; height: 45px; top: -25px; left: 20px; }
+        .condition-card.clouds .cloud-front::after { width: 35px; height: 35px; top: -20px; right: 15px; }
+        @keyframes drift-complex {
+            0% { transform: translateX(0) translateY(0); }
+            25% { transform: translateX(calc(var(--card-width) * 0.5 + 30px)) translateY(-8px); }
+            75% { transform: translateX(calc(var(--card-width) * 1.5 + 90px)) translateY(8px); }
+            100% { transform: translateX(calc(var(--card-width) * 2 + 120px)) translateY(0); }
+        }
+
+        /* Rainy Enhancements */
+        .condition-card.rain { background: linear-gradient(to bottom, #36465a, #222b35); }
+        .condition-card.rain .raindrop {
+            position: absolute; width: 1.5px; height: 15px; background: linear-gradient(to bottom, rgba(174, 217, 255, 0.9), rgba(174, 217, 255, 0.5));
+            border-radius: 0 0 3px 3px; z-index: 3; opacity: 0.8; animation: fall-card linear infinite; top: -20px;
+        }
+        .condition-card.rain .raindrop.heavy { width: 2.5px; height: 20px; background: linear-gradient(to bottom, #ffffff, rgba(174, 217, 255, 0.7)); }
+        .condition-card.rain .puddle {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 0px;
+            background-color: rgba(135, 206, 250, 0.1); border-top: 1px solid rgba(135, 206, 250, 0.15);
+            z-index: 1; transition: height 0.6s ease-out;
+        }
+        .condition-card.rain .puddle.active { height: 30px; }
+        .condition-card.rain .ripple {
+            position: absolute; bottom: 5px; left: 50%; border: 1px solid rgba(174, 217, 255, 0.4);
+            border-radius: 50%; opacity: 0; animation: ripple-effect 1.8s ease-out infinite;
+            z-index: 2; width: 10px; height: 5px;
+        }
+        @keyframes fall-card {
+            0% { transform: translateY(0); opacity: 0; }
+            10% { opacity: 1; }
+            100% { transform: translateY(calc(var(--card-min-height) + 20px)); opacity: 0.6; }
+        }
+        @keyframes ripple-effect {
+            0% { transform: translateX(-50%) scale(1); opacity: 0.6; }
+            100% { transform: translateX(-50%) scale(15); opacity: 0; }
+        }
+
+        /* Thunderstorm Effects */
+        .condition-card.thunderstorm .lightning-flash {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(255, 255, 255, 0.9); opacity: 0; z-index: 4; pointer-events: none;
+            animation: flash 1s steps(2, end) infinite; animation-duration: calc(var(--flash-interval, 6s));
+        }
+        @keyframes flash { 0%, 100% { opacity: 0; } 1%, 4% { opacity: 1; } 5%, 99% { opacity: 0; } }
+
+        /* Snowy Enhancements */
+        .condition-card.snow { background: linear-gradient(to bottom, #5f789b, #a3b8d5); }
+        .condition-card.snow .snowflake {
+             position: absolute; background-color: rgba(255, 255, 255, 0.85); border-radius: 50%;
+             z-index: 3; animation: snowfall-card-enhanced linear infinite; top: -10px; filter: blur(0.5px);
+        }
+        .condition-card.snow .snowflake.tiny { width: 2px; height: 2px; opacity: 0.6; }
+        .condition-card.snow .snowflake.small { width: 4px; height: 4px; opacity: 0.7;}
+        .condition-card.snow .snowflake.medium { width: 6px; height: 6px; opacity: 0.8;}
+        .condition-card.snow .snowflake.large { width: 8px; height: 8px; opacity: 0.9;}
+        .condition-card.snow .snow-accumulation {
+            position: absolute; bottom: 0; left: -10%; width: 120%; height: 0;
+            background: linear-gradient(to top, white, rgba(255, 255, 255, 0.9));
+            border-radius: 50% 50% 0 0 / 20px 20px 0 0;
+            z-index: 2; animation: accumulate 30s linear forwards; opacity: 0;
+            filter: drop-shadow(0 -2px 3px rgba(0, 0, 0, 0.1));
+        }
+        @keyframes snowfall-card-enhanced {
+            0% { transform: translateY(-10px) translateX(0) rotate(0deg); opacity: 1; }
+            50% { transform: translateY(calc(var(--card-min-height) / 2)) translateX(calc(var(--drift) / 1.5)) rotate(180deg); }
+            100% { transform: translateY(calc(var(--card-min-height) + 10px)) translateX(var(--drift)) rotate(360deg); opacity: 0; }
+        }
+        @keyframes accumulate { 0% { height: 0; opacity: 0.6; } 100% { height: 45px; opacity: 1; } }
+
+        /* Temperature Card Styles */
+        .temp-card { transition: background-color 0.8s ease; }
+        .temp-card.temp-cold { background-color: rgba(173, 216, 230, 0.15); }
+        .temp-card.temp-hot { background-color: rgba(255, 160, 122, 0.15); }
+        .temp-card .temp-sun {
+            position: absolute; left: 50%; transform: translateX(-50%); width: 55px; height: 55px;
+            background: radial-gradient(circle, #fff5cc 0%, var(--sun-color) 70%); border-radius: 50%;
+            box-shadow: 0 0 18px var(--sun-color), 0 0 30px var(--sun-glow);
+            z-index: 1; transition: top 0.9s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.6s ease, background 0.6s ease;
+            top: 85%; filter: blur(0.5px);
+        }
+        .temp-card.temp-hot .temp-sun { 
+            box-shadow: 0 0 25px #ff8c00, 0 0 40px rgba(255, 140, 0, 0.8); 
+            background: radial-gradient(circle, #ffcc80 0%, #ff8c00 70%);
+        }
+        .temp-card.temp-cold .temp-sun { 
+            box-shadow: 0 0 12px #add8e6, 0 0 18px rgba(173, 216, 230, 0.6); 
+            background: radial-gradient(circle, #e0f7fa 0%, #b3e5fc 70%);
+        }
+
+        /* Wind Card Styles */
+        .wind-animation-area { height: 100px; position: relative; }
+        .wind-line {
+            position: absolute; height: 2px;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0));
+            border-radius: 2px; animation: wind-blow-enhanced linear infinite; opacity: 0;
+            filter: blur(0.5px);
+        }
+        .wind-line.fast { 
+            height: 2.5px; 
+            filter: blur(0); 
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0)); 
+        }
+        @keyframes wind-blow-enhanced {
+            0% { transform: translateX(-150%) scaleX(0.3); opacity: 0; }
+            30% { transform: translateX(-50%) scaleX(0.8); opacity: 0.8; }
+            70% { transform: translateX(50%) scaleX(1); opacity: 0.8; }
+            100% { transform: translateX(150%) scaleX(0.3); opacity: 0; }
+        }
+        .wind-card::before {
+             content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+             background: repeating-linear-gradient(-45deg, transparent, transparent 15px, rgba(255,255,255,0.03) 15px, rgba(255,255,255,0.03) 18px);
+             opacity: 0; animation: wind-bg-shift linear infinite; z-index: 0;
+             animation-duration: var(--wind-intensity-duration, 4s);
+        }
+        @keyframes wind-bg-shift { 
+            from { background-position: 0 0; opacity: 0.4;} 
+            to { background-position: 80px 80px; opacity: 0.7;} 
+        }
+
+        /* Loading/Error Styles */
+        .loader {
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top: 5px solid #ffffff;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="p-6 md:p-8">
+    <h1 class="text-3xl md:text-4xl font-semibold text-center mb-6 text-white">AI 增强动画天气查询 - 优化版</h1>
+    
+    <div class="max-w-xl mx-auto mb-6 z-10 text-center">
+        <div class="input-container flex mb-3">
+          <label for="cityInput" class="sr-only">输入城市名称</label>
+          <input type="text" id="cityInput" placeholder="输入城市名..." autofocus
+                 class="flex-grow py-3 px-4 rounded-l-lg text-white outline-none">
+          <button type="button" id="queryBtn" 
+                  class="py-3 px-5 rounded-r-lg border-none text-white font-bold">
+            查询天气 <i class="fas fa-search ml-1"></i>
+          </button>
+        </div>
+        <div id="queryStatus" aria-live="polite" class="text-sm text-gray-300 min-h-5">请输入城市进行查询</div>
+    </div>
+
+    <div id="resultCardContainer" class="max-w-5xl mx-auto flex flex-wrap justify-center gap-6 mt-6 z-1">
+        <p class="text-gray-300">天气结果将显示在这里。</p>
+    </div>
+
+    <footer class="mt-10 text-center text-gray-400 text-sm">
+        <p>使用 OpenWeatherMap API 提供天气数据 | <a href="https://openweathermap.org/" class="text-blue-300 hover:text-blue-200" target="_blank">数据来源</a></p>
+        <p class="mt-1">图标由 <a href="https://fontawesome.com/" class="text-blue-300 hover:text-blue-200" target="_blank">Font Awesome</a> 提供</p>
+    </footer>
+
+    <script>
+        // --- API Configuration ---
+        const WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"; // 需要替换为您的API密钥
+        const WEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather";
+        
+        // --- DOM Elements ---
+        const cityInput = document.getElementById('cityInput');
+        const queryBtn = document.getElementById('queryBtn');
+        const queryStatus = document.getElementById('queryStatus');
+        const resultCardContainer = document.getElementById('resultCardContainer');
+
+        // --- Event Listeners ---
+        queryBtn.addEventListener('click', handleQuery);
+        cityInput.addEventListener('keypress', (event) => { 
+            if (event.key === 'Enter') handleQuery(); 
+        });
+
+        // --- Query Handler ---
+        function handleQuery() {
+            const city = cityInput.value.trim();
+            if (city) {
+                queryWeather(city);
+            } else {
+                showTemporaryStatus('请输入有效的城市名称', true);
+            }
+        }
+
+        // Weather API Call
+        async function queryWeather(city) {
+            queryStatus.textContent = `正在查询 "${city}" 的天气信息...`;
+            queryBtn.disabled = true;
+            cityInput.disabled = true;
+            resultCardContainer.innerHTML = '<div class="loader mx-auto mt-12"></div>';
+
+            try {
+                // Check if using demo mode (without API key)
+                if (WEATHER_API_KEY === "YOUR_OPENWEATHERMAP_API_KEY") {
+                    // Use demo data for testing without API key
+                    setTimeout(() => {
+                        const demoData = getDemoWeatherData(city);
+                        displayWeatherResults(demoData, city);
+                    }, 1000);
+                    return;
+                }
+
+                // Real API call
+                const url = `${WEATHER_API_URL}?q=${encodeURIComponent(city)}&appid=${WEATHER_API_KEY}&units=metric&lang=zh_cn`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    let errorMessage = `Error: ${response.status}`;
+                    if (response.status === 404) {
+                        errorMessage = "找不到城市，请检查拼写或尝试添加国家/地区代码";
+                    } else if (response.status === 401) {
+                        errorMessage = "API密钥无效或未提供";
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                const data = await response.json();
+                displayWeatherResults(data, city);
+                
+            } catch (error) {
+                handleError(`查询失败: ${error.message}`);
+                console.error("天气API查询错误:", error);
+            } finally {
+                queryBtn.disabled = false;
+                cityInput.disabled = false;
+            }
+        }
+
+        function displayWeatherResults(data, cityName) {
+            resultCardContainer.innerHTML = '';
+            
+            // Extract weather data
+            const city = data.name || cityName;
+            const condition = data.weather[0]?.main || "未知";
+            const conditionDescription = data.weather[0]?.description || "未知天气状况";
+            const temp = Math.round(data.main?.temp) || null;
+            const windSpeed = data.wind?.speed || null; // m/s
+            const windDeg = data.wind?.deg || 0;
+            const humidity = data.main?.humidity || null;
+            
+            // Create wind description
+            const windDirection = getWindDirection(windDeg);
+            const windDesc = windSpeed ? `${windSpeed} m/s ${windDirection}` : "无风速数据";
+            
+            // Clothing suggestion based on temperature and weather
+            const suggestion = getClothingSuggestion(temp, condition);
+            
+            // 1. Condition Card
+            const conditionCard = createCard('condition-card');
+            const weatherClass = mapWeatherCodeToClass(data.weather[0]?.id || 800);
+            const isThunderstorm = weatherClass === 'thunderstorm';
+            conditionCard.classList.add(weatherClass);
+            conditionCard.innerHTML = `
+                <h3 class="text-xl font-semibold text-center border-b border-white border-opacity-10 pb-3 mb-4 z-5">${city}</h3>
+                <p class="condition-text text-center my-auto z-5">${conditionDescription}</p>
+            `;
+            
+            // Add animation elements
+            addWeatherAnimationElements(conditionCard, weatherClass, isThunderstorm);
+            resultCardContainer.appendChild(conditionCard);
+            
+            // Trigger particles
+            if (weatherClass === 'rain' || weatherClass === 'snow' || weatherClass === 'thunderstorm') {
+                createParticles(conditionCard, weatherClass);
+            }
+            
+            // 2. Temperature Card
+            if (temp !== null) {
+                const tempCard = createCard('temp-card');
+                const tempColorClass = temp > 29 ? 'temp-hot' : (temp < 8 ? 'temp-cold' : '');
+                if (tempColorClass) tempCard.classList.add(tempColorClass);
+                tempCard.innerHTML = `
+                    <h3 class="text-lg font-semibold text-center border-b border-white border-opacity-10 pb-3 mb-4 z-5">温度</h3>
+                    <div class="temp-value text-5xl font-bold text-center mb-6 z-2">${temp}°C</div>
+                    <div class="temp-sun"></div>
+                `;
+                resultCardContainer.appendChild(tempCard);
+                
+                setTimeout(() => {
+                    const tempSun = tempCard.querySelector('.temp-sun');
+                    if(tempSun) tempSun.style.top = mapTempToSunPosition(temp) + '%';
+                }, 0);
+            }
+            
+            // 3. Wind Card
+            const windCard = createCard('wind-card');
+            windCard.innerHTML = `
+                <h3 class="text-lg font-semibold text-center border-b border-white border-opacity-10 pb-3 mb-4 z-5">风力</h3>
+                <p class="text-xl text-center my-2 z-2">${windDesc}</p>
+                <div class="wind-animation-area w-full mt-2 mb-2"></div>
+            `;
+            resultCardContainer.appendChild(windCard);
+            
+            setTimeout(() => {
+                const animArea = windCard.querySelector('.wind-animation-area');
+                const windBg = windCard;
+                if(animArea && windSpeed !== null) {
+                    createWindLines(animArea, windSpeed);
+                    const bgDuration = Math.max(0.4, 4.5 / (1 + windSpeed * 0.3));
+                    windBg.style.setProperty('--wind-intensity-duration', `${bgDuration}s`);
+                } else if (animArea) {
+                    animArea.innerHTML = '<p class="text-sm opacity-70 text-center">无具体风速</p>';
+                }
+            }, 0);
+            
+            // 4. Humidity Card
+            if (humidity !== null) {
+                const humidityCard = createCard('');
+                humidityCard.innerHTML = `
+                    <h3 class="text-lg font-semibold text-center border-b border-white border-opacity-10 pb-3 mb-4">湿度</h3>
+                    <p class="text-4xl font-bold text-center my-auto">${humidity}%</p>
+                `;
+                resultCardContainer.appendChild(humidityCard);
+            }
+            
+            // 5. Suggestion Card
+            const suggestionCard = createCard('');
+            suggestionCard.innerHTML = `
+                <h3 class="text-lg font-semibold text-center border-b border-white border-opacity-10 pb-3 mb-4">穿衣建议</h3>
+                <p class="text-center italic my-auto">${suggestion}</p>
+            `;
+            resultCardContainer.appendChild(suggestionCard);
+            
+            // Update status
+            queryStatus.textContent = `已获取 ${city} 的天气信息`;
+        }
+        
+        // --- Helper: Create a base info card ---
+        function createCard(specificClass = '') {
+            const card = document.createElement('div');
+            card.className = `info-card ${specificClass} flex flex-col p-5 rounded-xl flex-1 min-w-[220px] relative`;
+            return card;
+        }
+        
+        // --- Helper: Map OpenWeatherMap weather code to CSS class ---
+        function mapWeatherCodeToClass(weatherId) {
+            // Using official OpenWeatherMap weather condition codes
+            // https://openweathermap.org/weather-conditions
+            
+            // Thunderstorm (200-299)
+            if (weatherId >= 200 && weatherId < 300) return 'thunderstorm';
+            
+            // Drizzle (300-399) and Rain (500-599)
+            if ((weatherId >= 300 && weatherId < 400) || 
+                (weatherId >= 500 && weatherId < 600)) return 'rain';
+            
+            // Snow (600-699)
+            if (weatherId >= 600 && weatherId < 700) return 'snow';
+            
+            // Atmosphere (700-799) - fog, mist, etc.
+            if (weatherId >= 700 && weatherId < 800) return 'clouds';
+            
+            // Clear (800)
+            if (weatherId === 800) return 'sunny';
+            
+            // Clouds (801-899)
+            if (weatherId > 800 && weatherId < 900) return 'clouds';
+            
+            return 'sunny'; // Default
+        }
+        
+        // --- Helper: Add weather animation elements ---
+        function addWeatherAnimationElements(card, weatherClass, isThunderstorm = false) {
+            // Clear any existing elements
+            card.querySelectorAll('.sun, .cloud, .sun-ray, .heat-haze, .lightning-flash, .snow-accumulation, .puddle, .ripple').forEach(el => el.remove());
+            
+            switch(weatherClass) {
+                case 'sunny':
+                    const sun = document.createElement('div');
+                    sun.className = 'sun';
+                    card.appendChild(sun);
+                    
+                    for (let i=0; i<3; i++) {
+                        const ray = document.createElement('div');
+                        ray.className = `sun-ray r${i+1}`;
+                        card.appendChild(ray);
+                    }
+                    
+                    const haze = document.createElement('div');
+                    haze.className = 'heat-haze';
+                    card.appendChild(haze);
+                    break;
+                    
+                case 'clouds':
+                    ['back', 'mid', 'front'].forEach((layer) => {
+                        const cloud = document.createElement('div');
+                        cloud.className = `cloud cloud-${layer}`;
+                        card.appendChild(cloud);
+                    });
+                    break;
+                    
+                case 'rain':
+                case 'thunderstorm':
+                    // Add clouds
+                    const rainCloud1 = document.createElement('div');
+                    rainCloud1.className = 'cloud cloud-back';
+                    rainCloud1.style.opacity = '0.2';
+                    card.appendChild(rainCloud1);
+                    
+                    const rainCloud2 = document.createElement('div');
+                    rainCloud2.className = 'cloud cloud-mid';
+                    rainCloud2.style.opacity = '0.3';
+                    rainCloud2.style.animationDelay = '-10s';
+                    card.appendChild(rainCloud2);
+                    
+                    // Add puddle
+                    const puddle = document.createElement('div');
+                    puddle.className = 'puddle';
+                    card.appendChild(puddle);
+                    setTimeout(() => puddle.classList.add('active'), 100);
+                    
+                    // Add ripples
+                    for(let i=0; i<4; i++) {
+                        const ripple = document.createElement('div');
+                        ripple.className = 'ripple';
+                        ripple.style.left = (20 + Math.random() * 60) + '%';
+                        ripple.style.animationDelay = `${i * 0.4 + Math.random() * 0.2}s`;
+                        ripple.style.animationDuration = `${1.5 + Math.random() * 0.5}s`;
+                        card.appendChild(ripple);
+                    }
+                    
+                    // Add lightning for thunderstorm
+                    if (isThunderstorm) {
+                        const flash = document.createElement('div');
+                        flash.className = 'lightning-flash';
+                        flash.style.setProperty('--flash-interval', `${4 + Math.random() * 5}s`);
+                        card.appendChild(flash);
+                    }
+                    break;
+                    
+                case 'snow':
+                    const snowCloud = document.createElement('div');
+                    snowCloud.className = 'cloud cloud-mid';
+                    snowCloud.style.opacity = '0.3';
+                    snowCloud.style.filter = 'blur(2px)';
+                    card.appendChild(snowCloud);
+                    
+                    const accumulation = document.createElement('div');
+                    accumulation.className = 'snow-accumulation';
+                    card.appendChild(accumulation);
+                    break;
+            }
+        }
+        
+        // --- Helper: Create Rain/Snow Particles ---
+        function createParticles(card, weatherClass) {
+            const isRain = weatherClass === 'rain' || weatherClass === 'thunderstorm';
+            const isSnow = weatherClass === 'snow';
+            
+            if (!isRain && !isSnow) return;
+            
+            const particleClass = isRain ? 'raindrop' : 'snowflake';
+            card.querySelectorAll(`.${particleClass}`).forEach(el => el.remove());
+            
+            const cardWidth = card.offsetWidth;
+            if (cardWidth <= 0) return;
+            
+            const particleCount = isRain ? 80 : 60;
+            const minDuration = isRain ? 0.6 : 6;
+            const maxDuration = isRain ? 1.3 : 12;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add(particleClass);
+                
+                const startLeft = Math.random() * cardWidth;
+                const delay = Math.random() * 10;
+                const duration = Math.random() * (maxDuration - minDuration) + minDuration;
+                
+                particle.style.left = `${startLeft}px`;
+                particle.style.animationDelay = `${delay}s`;
+                particle.style.animationDuration = `${duration}s`;
+                
+                if (isRain && Math.random() < 0.15) {
+                    particle.classList.add('heavy');
+                }
+                
+                if (isSnow) {
+                    const sizeRand = Math.random();
+                    if (sizeRand < 0.2) particle.classList.add('tiny');
+                    else if (sizeRand < 0.5) particle.classList.add('small');
+                    else if (sizeRand < 0.85) particle.classList.add('medium');
+                    else particle.classList.add('large');
+                    
+                    const driftAmount = (Math.random() - 0.5) * 80;
+                    particle.style.setProperty('--drift', `${driftAmount}px`);
+                    particle.style.opacity = 0.5 + Math.random() * 0.5;
+                }
+                
+                card.appendChild(particle);
+            }
+        }
+        
+        // --- Helper: Create Wind Lines ---
+        function createWindLines(container, windSpeedMps) {
+            container.innerHTML = '';
+            
+            const intensityFactor = Math.min(Math.max(windSpeedMps / 18, 0.1), 1.3);
+            const lineCount = Math.round(4 + 12 * intensityFactor);
+            const baseDuration = 2.8;
+            const minDuration = 0.3;
+            const duration = Math.max(minDuration, baseDuration / (1 + windSpeedMps * 0.7));
+            
+            for (let i = 0; i < lineCount; i++) {
+                const line = document.createElement('div');
+                line.className = 'wind-line';
+                
+                if (Math.random() > 0.6) {
+                    line.classList.add('fast');
+                }
+                
+                line.style.top = (5 + Math.random() * 90) + '%';
+                line.style.width = (25 + Math.random() * 40) + '%';
+                line.style.opacity = 0.3 + Math.random() * 0.4;
+                line.style.animationDuration = `${duration + (Math.random() - 0.5) * (duration * 0.5)}s`;
+                line.style.animationDelay = `${Math.random() * duration * 2}s`;
+                
+                container.appendChild(line);
+            }
+        }
+        
+        // --- Helper: Map Temperature to Sun Position (%) ---
+        function mapTempToSunPosition(tempCelsius) {
+            const minTemp = -10;
+            const maxTemp = 40;
+            const minPos = 85;
+            const maxPos = 15;
+            
+            if (tempCelsius === null || tempCelsius === undefined) return minPos;
+            
+            const temp = Math.max(minTemp, Math.min(maxTemp, tempCelsius));
+            const percentage = (temp - minTemp) / (maxTemp - minTemp);
+            return minPos - percentage * (minPos - maxPos);
+        }
+        
+        // --- Helper: Get Wind Direction Text ---
+        function getWindDirection(degrees) {
+            const directions = ['北风', '东北风', '东风', '东南风', '南风', '西南风', '西风', '西北风'];
+            return directions[Math.round(degrees / 45) % 8];
+        }
+        
+        // --- Helper: Get Clothing Suggestion ---
+        function getClothingSuggestion(temp, weatherCondition) {
+            if (temp === null) return "无法提供穿衣建议";
+            
+            let suggestion = "";
+            
+            // Temperature-based suggestions
+            if (temp >= 30) {
+                suggestion = "穿轻薄、透气的衣物，注意防晒";
+            } else if (temp >= 25) {
+                suggestion = "适合穿短袖短裤，可能需要防晒";
+            } else if (temp >= 20) {
+                suggestion = "适合穿短袖，带一件薄外套以备不时之需";
+            } else if (temp >= 15) {
+                suggestion = "建议穿长袖衬衫或薄毛衣";
+            } else if (temp >= 10) {
+                suggestion = "适合穿夹克或轻薄的外套";
+            } else if (temp >= 5) {
+                suggestion = "建议穿厚夹克或轻便羽绒服";
+            } else if (temp >= 0) {
+                suggestion = "需要穿羽绒服、围巾和手套";
+            } else {
+                suggestion = "穿厚重的羽绒服，做好全面保暖措施";
+            }
+            
+            // Weather condition modifiers
+            if (weatherCondition === 'Rain' || weatherCondition === 'Drizzle') {
+                suggestion += "，记得带伞或穿雨衣";
+            } else if (weatherCondition === 'Thunderstorm') {
+                suggestion += "，建议待在室内避开雷雨";
+            } else if (weatherCondition === 'Snow') {
+                suggestion += "，穿防滑防水鞋，注意保暖";
+            } else if (weatherCondition === 'Mist' || weatherCondition === 'Fog') {
+                suggestion += "，雾天出行注意安全";
+            }
+            
+            return suggestion;
+        }
+        
+        // --- Helper: Show Temporary Status Message ---
+        function showTemporaryStatus(message, isError = false) {
+            queryStatus.textContent = message;
+            queryStatus.style.color = isError ? 'rgba(255, 87, 87, 0.9)' : 'rgba(255, 255, 255, 0.7)';
+            
+            setTimeout(() => {
+                if (queryStatus.textContent === message) {
+                    queryStatus.textContent = '请输入城市进行查询';
+                    queryStatus.style.color = 'rgba(255, 255, 255, 0.7)';
+                }
+            }, 3000);
+        }
+        
+        // --- Helper: Handle Error Display ---
+        function handleError(message) {
+            queryStatus.textContent = '查询失败';
+            
+            resultCardContainer.innerHTML = `
+                <div class="bg-red-900 bg-opacity-20 border border-red-800 border-opacity-30 rounded-xl p-5 flex items-center justify-center flex-col text-red-200 text-center">
+                    <i class="fas fa-exclamation-triangle text-3xl mb-3"></i>
+                    <p>${message}</p>
+                    <p class="text-sm mt-2 text-gray-300">如果您使用的是演示模式，请尝试替换为有效的API密钥</p>
+                </div>
+            `;
+        }
+        
+        // --- Demo Mode: Get fake weather data when no API key is provided ---
+        function getDemoWeatherData(city) {
+            // Default values
+            const baseData = {
+                name: city,
+                main: {
+                    temp: 22,
+                    humidity: 65
+                },
+                wind: {
+                    speed: 3.5,
+                    deg: 45
+                },
+                weather: [
+                    {
+                        id: 800,
+                        main: "Clear",
+                        description: "晴朗"
+                    }
+                ]
+            };
+            
+            // Randomize values based on city name to create variation
+            const cityHash = hashString(city);
+            
+            // Weather conditions by first character of hash
+            const weatherTypes = [
+                { id: 800, main: "Clear", description: "晴朗" },
+                { id: 801, main: "Clouds", description: "多云" },
+                { id: 500, main: "Rain", description: "小雨" },
+                { id: 600, main: "Snow", description: "小雪" },
+                { id: 200, main: "Thunderstorm", description: "雷阵雨" }
+            ];
+            
+            const weatherIndex = cityHash % weatherTypes.length;
+            baseData.weather[0] = weatherTypes[weatherIndex];
+            
+            // Temperature based on second part of hash
+            const tempBase = (cityHash % 50) - 10; // -10 to 40
+            baseData.main.temp = tempBase;
+            
+            // Wind based on third part of hash
+            baseData.wind.speed = 1 + (cityHash % 15); // 1 to 15 m/s
+            baseData.wind.deg = (cityHash * 38) % 360; // 0 to 359 degrees
+            
+            // Humidity based on fourth part of hash
+            baseData.main.humidity = 35 + (cityHash % 60); // 35% to 95%
+            
+            return baseData;
+        }
+        
+        // Simple hash function for consistent demo values
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return Math.abs(hash);
+        }
+    </script>
+</body>
+</html>
